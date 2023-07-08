@@ -1,0 +1,7 @@
+{
+    "sketch": "src\\rf95_reliable_datagram_client_m0\\rf95_reliable_datagram_client_m0.ino",
+    "port": "COM9",
+    "configuration": "opt=small,usbstack=arduino,debug=off",
+    "board": "adafruit:samd:adafruit_feather_m0",
+    "output": "../ArduinoOutput"
+}

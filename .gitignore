@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+ArduinoOutput/
+server/lib
+server/target
