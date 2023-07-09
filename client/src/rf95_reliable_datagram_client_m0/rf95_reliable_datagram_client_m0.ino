@@ -66,22 +66,26 @@ void setup()
   //  driver.setCADTimeout(10000);
 }
 
-uint8_t data[] = "Hello World!";
+// uint8_t data[] = "Hello World!";
 // Dont put this on the stack:
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+int counter = 0;
 
 void loop()
 {
   Serial.println("Sending to rf95_reliable_datagram_server");
     
   // Send a message to manager_server
-  if (manager.sendtoWait(data, sizeof(data), SERVER_ADDRESS))
+  snprintf((char *)buf, sizeof(buf), "to server counter=%d", ++counter);
+
+  if (manager.sendtoWait(buf, sizeof(buf), SERVER_ADDRESS))
   {
     // Now wait for a reply from the server
     uint8_t len = sizeof(buf);
     uint8_t from;   
     if (manager.recvfromAckTimeout(buf, &len, 2000, &from))
     {
+      buf[len] = 0;
       Serial.print("got reply from : 0x");
       Serial.print(from, HEX);
       Serial.print(": ");
@@ -94,6 +98,6 @@ void loop()
   }
   else
     Serial.println("sendtoWait failed");
-  delay(500);
+  delay(3000);
 }
 
