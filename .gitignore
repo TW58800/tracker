@@ -34,3 +34,5 @@
 ArduinoOutput/
 server/lib
 server/target
+server/nul
+client/.vscode/c_cpp_properties.json
