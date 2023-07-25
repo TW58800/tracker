@@ -72,12 +72,15 @@ void setup()
 
 // Dont put this on the stack:
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-int counter = 0;
+uint32_t counter = 0;
+uint16_t gpsDataLen = 0;
 
 void loop()
 {
   // read data from the GPS in the 'main loop'
-  char c = GPS.read();
+  if(char c = GPS.read()) {
+    counter++;
+  }
   // if you want to debug, this is a good time to do it!
   //if (GPSECHO)
   //  if (c) Serial.print(c);
@@ -86,13 +89,17 @@ void loop()
     // a tricky thing here is if we print the NMEA sentence, or data
     // we end up not listening and catching other sentences!
     // so be very wary if using OUTPUT_ALLDATA and trying to print out data
-    Serial.print(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
-    if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
-      return; // we can fail to parse a sentence in which case we should just wait for another
+    //Serial.print(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
+    gpsDataLen = counter;
+    counter = 0;
+    if (!GPS.parse(GPS.lastNMEA())) { // this also sets the newNMEAreceived() flag to false
+      Serial.println("\nFailed to parse GPS data\n");
+      //return; // we can fail to parse a sentence in which case we should just wait for another
+    }
   }
 
   // approximately every 2 seconds or so, print out the current stats
-  if (millis() - timer > 5000) {
+  if (millis() - timer > 10000) {
     timer = millis(); // reset the timer
     /*
     Serial.print("\nTime: ");
@@ -113,6 +120,7 @@ void loop()
     Serial.print(GPS.month, DEC); Serial.print("/20");
     Serial.println(GPS.year, DEC);
     */
+    Serial.print("Character Count: "); Serial.println(gpsDataLen);
     Serial.print("Fix: "); Serial.print((int)GPS.fix);
     Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
     if (GPS.fix) {
@@ -126,33 +134,34 @@ void loop()
       Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
       Serial.print("Antenna status: "); Serial.println((int)GPS.antenna);
     }
-  }
 
-  Serial.println("Sending to rf95_reliable_datagram_server");
-    
-  // Send a message to manager_server
-  snprintf((char *)buf, sizeof(buf), GPS.lastNMEA()); //"to server counter=%d", ++counter);
+    Serial.println("\nSending to rf95_reliable_datagram_server");
 
-  if (manager.sendtoWait(buf, sizeof(buf), SERVER_ADDRESS))
-  {
-    // Now wait for a reply from the server
-    uint8_t len = sizeof(buf);
-    uint8_t from;   
-    if (manager.recvfromAckTimeout(buf, &len, 2000, &from))
+    // Send a message to manager_server
+    snprintf((char *)buf, sizeof(buf), GPS.lastNMEA()); //"to server counter=%d", ++counter);
+
+    if (manager.sendtoWait(buf, sizeof(buf), SERVER_ADDRESS))
     {
-      buf[len] = 0;
-      Serial.print("got reply from : 0x");
-      Serial.print(from, HEX);
-      Serial.print(": ");
-      Serial.println((char*)buf);
+      // Now wait for a reply from the server
+      Serial.println((char *)buf);
+      uint8_t len = sizeof(buf);
+      uint8_t from;   
+      if (manager.recvfromAckTimeout(buf, &len, 2000, &from))
+      {
+        buf[len] = 0;
+        Serial.print("Got reply from 0x");
+        Serial.println(from, HEX);
+        //Serial.print("Data: ");
+        Serial.println((char*)buf);
+      }
+      else
+      {
+        Serial.println("No reply, is rf95_reliable_datagram_server running?");
+      }
     }
     else
-    {
-      Serial.println("No reply, is rf95_reliable_datagram_server running?");
-    }
+      Serial.println("sendtoWait failed");
+    //delay(3000);
   }
-  else
-    Serial.println("sendtoWait failed");
-  delay(3000);
 }
 

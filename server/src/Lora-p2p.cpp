@@ -3,7 +3,7 @@
 /******************************************************/
 
 #include "Particle.h"
-#line 1 "c:/Users/TW/Documents/GitHub/tracker/server/src/Lora-p2p.ino"
+#line 1 "c:/Users/timwh/Projects/tracker/server/src/Lora-p2p.ino"
 // This #include statement was automatically added by the Particle IDE.
 //#include <RF9X-RK.h>
 
@@ -21,7 +21,7 @@
 
 void setup();
 void loop();
-#line 16 "c:/Users/TW/Documents/GitHub/tracker/server/src/Lora-p2p.ino"
+#line 16 "c:/Users/timwh/Projects/tracker/server/src/Lora-p2p.ino"
 #define CLIENT_ADDRESS 1
 #define SERVER_ADDRESS 2
 
@@ -30,7 +30,7 @@ SYSTEM_MODE(AUTOMATIC);
 
 // Connect to the GPS on the hardware port
 //Adafruit_GPS GPS(&Serial1);
-Adafruit_GPS GPS;
+Adafruit_GPS GPS;  // as we are only parsing GPS data received from the client, there is no need to connect to the harware port
 
 uint32_t timer = millis();
 
@@ -89,35 +89,36 @@ void loop()
 {
 	if (manager.available())
 	{
-        Serial.println("available");
+        //Serial.println("Available");
 		// Wait for a message addressed to us from the client
 		uint8_t len = sizeof(buf);
 		uint8_t from;
 		if (manager.recvfromAck(buf, &len, &from))
 		{
 			buf[len] = 0;
-			Serial.printlnf("got packet from 0x%02x rssi=%d %s", from, driver.lastRssi(), (char *)buf);
+			Serial.printlnf("Got packet from 0x%02x rssi=%d %s", from, driver.lastRssi(), (char *)buf);
 
-			int request = 0;
-			char *cp = strchr((char *)buf, '=');
-			if (cp) {
-				request = atoi(cp + 1);
-			}
+			//int request = 0;
+			//char *cp = strchr((char *)buf, '=');
+			//if (cp) {
+			//	request = atoi(cp + 1);
+			//}
 
-			snprintf((char *)buf, sizeof(buf), "request=%d rssi=%d", request, driver.lastRssi());
+			//snprintf((char *)buf, sizeof(buf), "request=%d rssi=%d", request, driver.lastRssi());
 			
-    		if (!GPS.parse((char*)buf)) // this also sets the newNMEAreceived() flag to false
-      			return; // we can fail to parse a sentence in which case we should just wait for another
-
+    		if (!GPS.parse((char*)buf)) { // this also sets the newNMEAreceived() flag to false
+				Serial.println("\nFailed to parse GPS data\n");
+      		//	return; // we can fail to parse a sentence in which case we should just wait for another
+			}
 			// Send a reply back to the originator client
 			if (!manager.sendtoWait(buf, strlen((char *)buf), from))
 				Serial.println("sendtoWait failed");
 		}
-	}
+//	}
 
   // approximately every 2 seconds or so, print out the current stats
-  if (millis() - timer > 5000) {
-    timer = millis(); // reset the timer
+//  if (millis() - timer > 5000) {
+//    timer = millis(); // reset the timer
     /*
     Serial.print("\nTime: ");
     if (GPS.hour < 10) { Serial.print('0'); }
@@ -148,6 +149,7 @@ void loop()
       Serial.print("Angle: "); Serial.println(GPS.angle);
       Serial.print("Altitude: "); Serial.println(GPS.altitude);
       Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
+	  Serial.println("\n");
       //Serial.print("Antenna status: "); Serial.println((int)GPS.antenna);  // GPS class has no member 'antenna'
     }
   }
