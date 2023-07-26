@@ -36,7 +36,7 @@ void setup()
   // also spit it out
   Serial.begin(115200);
   Serial.println("Adafruit GPS library basic parsing test!");
-  while (!Serial) ; // Wait for serial port to be available
+  //while (!Serial) ; // Wait for serial port to be available
   if (!manager.init())
     Serial.println("init failed");
   
@@ -77,8 +77,36 @@ uint16_t gpsDataLen = 0;
 
 void loop()
 {
+	if (manager.available())
+	{
+		// Wait for a message addressed to us from the client
+		uint8_t len = sizeof(buf);
+		uint8_t from;
+		if (manager.recvfromAck(buf, &len, &from))
+    //if (manager.recvfrom(buf, &len, &from))
+    //if (manager.recvfromAckTimeout(buf, &len, &from))
+		{
+			buf[len] = 0;
+			Serial.printf("\nGot packet from 0x%02x rssi=%d %s", from, driver.lastRssi(), (char *)buf);
+
+      if (buf[0] == 0) {
+        Serial.print("Message is a command");
+      }
+			//int request = 0;
+			//char *cp = strchr((char *)buf, '=');
+			//if (cp) {
+			//	request = atoi(cp + 1);
+			//}
+
+			//snprintf((char *)buf, sizeof(buf), "request=%d rssi=%d", request, driver.lastRssi());
+			// Send a reply back to the originator client
+			if (!manager.sendtoWait(buf, strlen((char *)buf), from))
+				Serial.println("sendtoWait failed");
+		}
+  }
+
   // read data from the GPS in the 'main loop'
-  if(char c = GPS.read()) {
+  if (char c = GPS.read()) {
     counter++;
   }
   // if you want to debug, this is a good time to do it!
