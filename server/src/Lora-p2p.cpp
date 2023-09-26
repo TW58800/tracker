@@ -25,7 +25,7 @@ void loop();
 #define CLIENT_ADDRESS 1
 #define SERVER_ADDRESS 2
 
-SYSTEM_THREAD(ENABLED);
+//SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(AUTOMATIC);
 
 // Connect to the GPS on the hardware port
@@ -46,17 +46,25 @@ RHReliableDatagram manager(driver, SERVER_ADDRESS);
 // Need this on Arduino Zero with SerialUSB port (eg RocketScream Mini Ultra Pro)
 //#define Serial SerialUSB
 
+TCPServer server = TCPServer(23);
+TCPClient client;
+
+int LED = D7;
+
 void setup() 
 {
-	// Rocket Scream Mini Ultra Pro with the RFM95W only:
-	// Ensure serial flash is not interfering with radio communication on SPI bus
-	//  pinMode(4, OUTPUT);
-	//  digitalWrite(4, HIGH);
-
+	pinMode(LED, OUTPUT);   
+	WiFi.connect();
 	Serial.begin(9600);
 	// Wait for a USB serial connection for up to 15 seconds
 	waitFor(Serial.isConnected, 15000);
     Serial.println("connected");
+  	Serial.printlnf("localIP=%s", WiFi.localIP().toString().c_str());
+  	Serial.printlnf("subnetMask=%s", WiFi.subnetMask().toString().c_str());
+  	Serial.printlnf("gatewayIP=%s", WiFi.gatewayIP().toString().c_str());
+
+  	// start listening for clients
+  	server.begin();
 
 	if (!manager.init())
 		Serial.println("init failed");
@@ -84,74 +92,100 @@ void setup()
 
 // Dont put this on the stack:
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+uint8_t latLong[8];
 
-void loop()
-{
-	if (manager.available())
-	{
-        //Serial.println("Available");
+void loop() {
+	if (manager.available()) {
 		// Wait for a message addressed to us from the client
 		uint8_t len = sizeof(buf);
 		uint8_t from;
-		if (manager.recvfromAck(buf, &len, &from))
-		{
+		if (manager.recvfromAck(buf, &len, &from)) {
 			buf[len] = 0;
-			Serial.printlnf("Got packet from 0x%02x rssi=%d %s", from, driver.lastRssi(), (char *)buf);
-
-			//int request = 0;
-			//char *cp = strchr((char *)buf, '=');
-			//if (cp) {
-			//	request = atoi(cp + 1);
-			//}
-
-			//snprintf((char *)buf, sizeof(buf), "request=%d rssi=%d", request, driver.lastRssi());
+			Serial.printlnf("\nGot packet from 0x%02x rssi=%d %s", from, driver.lastRssi(), (char *)buf);
 			
     		if (!GPS.parse((char*)buf)) { // this also sets the newNMEAreceived() flag to false
 				Serial.println("\nFailed to parse GPS data\n");
-      		//	return; // we can fail to parse a sentence in which case we should just wait for another
+			}
+			else {
+  				digitalWrite(LED, HIGH); // sets the LED on
+  				delay(200);              // waits for 200mS
+  				digitalWrite(LED, LOW);  // sets the LED off
+  				if (client.status()) { 
+      				byte payload = client.read(); 
+      				Serial.printlnf("TCP bytes received: %i\n", payload);
+					byte* lat = reinterpret_cast<byte*>(&GPS.latitudeDegrees);
+					byte* lng = reinterpret_cast<byte*>(&GPS.longitudeDegrees);
+					int16_t Rssi = driver.lastRssi();
+					byte* rssi = reinterpret_cast<byte*>(&Rssi);
+					uint8_t latLong[10] = {0,0,0,0,0,0,0,0,0,0};
+					latLong[0] = lat[0];
+					latLong[1] = lat[1];
+					latLong[2] = lat[2];
+					latLong[3] = lat[3];
+					latLong[4] = lng[0];
+					latLong[5] = lng[1];
+					latLong[6] = lng[2];
+					latLong[7] = lng[3];
+					latLong[8] = rssi[1];
+					latLong[9] = rssi[0];
+					server.write(latLong, 10, 5000); 
+      				//Serial.printlnf("Bytes sent: %c", lat);
+					
+					//Particle.publish("gpsdata", (char *)buf);
+
+					/*
+					float latitude = 51.24855439074274f;
+					float longditude = -0.5447383774659881f;
+					std::memcpy(&latLong, &latitude, 4);
+					std::memcpy(&latLong+4, &longditude, 4);
+					Serial.printlnf("Latitude: %f, Longditude: %f", &latLong, &latLong+4);
+					int bytes = server.write(reinterpret_cast<byte*>(&latLong), 8, 10000);
+					int err = server.getWriteError();
+					//if (err != 0) {
+  					Serial.printlnf("TCPServer::write() failed (error = %d), number of bytes written: %d", err, bytes);
+					*/
+				}
+				else {
+					// if no client is yet connected, check for a new connection
+					client = server.available();
+				}
 			}
 			// Send a reply back to the originator client
-			if (!manager.sendtoWait(buf, strlen((char *)buf), from))
+			if (!manager.sendtoWait(buf, len, from))
 				Serial.println("sendtoWait failed");
 		}
-//	}
-
-  // approximately every 2 seconds or so, print out the current stats
-//  if (millis() - timer > 5000) {
-//    timer = millis(); // reset the timer
-    /*
-    Serial.print("\nTime: ");
-    if (GPS.hour < 10) { Serial.print('0'); }
-    Serial.print(GPS.hour, DEC); Serial.print(':');
-    if (GPS.minute < 10) { Serial.print('0'); }
-    Serial.print(GPS.minute, DEC); Serial.print(':');
-    if (GPS.seconds < 10) { Serial.print('0'); }
-    Serial.print(GPS.seconds, DEC); Serial.print('.');
-    if (GPS.milliseconds < 10) {
-      Serial.print("00");
-    } else if (GPS.milliseconds > 9 && GPS.milliseconds < 100) {
-      Serial.print("0");
-    }
-    Serial.println(GPS.milliseconds);
-    Serial.print("Date: ");
-    Serial.print(GPS.day, DEC); Serial.print('/');
-    Serial.print(GPS.month, DEC); Serial.print("/20");
-    Serial.println(GPS.year, DEC);
-    */
-    Serial.print("Fix: "); Serial.print((int)GPS.fix);
-    Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
-    if (GPS.fix) {
-      Serial.print("Location: ");
-      Serial.print(GPS.latitude, 4); Serial.print(GPS.lat);
-      Serial.print(", ");
-      Serial.print(GPS.longitude, 4); Serial.println(GPS.lon);
-      Serial.print("Speed (knots): "); Serial.println(GPS.speed);
-      Serial.print("Angle: "); Serial.println(GPS.angle);
-      Serial.print("Altitude: "); Serial.println(GPS.altitude);
-      Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
-	  Serial.println("\n");
-      //Serial.print("Antenna status: "); Serial.println((int)GPS.antenna);  // GPS class has no member 'antenna'
-    }
-  }
-}
-
+		/*
+  		Serial.print("\nTime: ");
+  		if (GPS.hour < 10) { Serial.print('0'); }
+  		Serial.print(GPS.hour, DEC); Serial.print(':');
+  		if (GPS.minute < 10) { Serial.print('0'); }
+  		Serial.print(GPS.minute, DEC); Serial.print(':');
+  		if (GPS.seconds < 10) { Serial.print('0'); }
+  		Serial.print(GPS.seconds, DEC); Serial.print('.');
+  		if (GPS.milliseconds < 10) {
+  		  Serial.print("00");
+  		} else if (GPS.milliseconds > 9 && GPS.milliseconds < 100) {
+  		  Serial.print("0");
+  		}
+  		Serial.println(GPS.milliseconds);
+  		Serial.print("Date: ");
+  		Serial.print(GPS.day, DEC); Serial.print('/');
+  		Serial.print(GPS.month, DEC); Serial.print("/20");
+  		Serial.println(GPS.year, DEC);
+  		*/
+		Serial.print("Fix: "); Serial.print((int)GPS.fix);
+		Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
+		if (GPS.fix) {
+		  Serial.print("Location: ");
+		  Serial.print(GPS.latitudeDegrees, 4); Serial.print(GPS.lat);
+		  Serial.print(", ");
+		  Serial.print(GPS.longitudeDegrees, 4); Serial.println(GPS.lon);
+		  Serial.print("Speed (knots): "); Serial.println(GPS.speed);
+		  Serial.print("Angle: "); Serial.println(GPS.angle);
+		  Serial.print("Altitude: "); Serial.println(GPS.altitude);
+		  Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
+		  Serial.println("\n");
+		  //Serial.print("Antenna status: "); Serial.println((int)GPS.antenna);  // GPS class has no member 'antenna'
+		}
+	}
+}		
