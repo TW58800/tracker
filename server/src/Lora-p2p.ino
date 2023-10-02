@@ -83,7 +83,7 @@ void setup()
 
 // Dont put this on the stack:
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-uint8_t latLong[8];
+float* batt;
 
 void loop() {
 	if (manager.available()) {
@@ -92,9 +92,12 @@ void loop() {
 		uint8_t from;
 		if (manager.recvfromAck(buf, &len, &from)) {
 			buf[len] = 0;
-			Serial.printlnf("\nGot packet from 0x%02x rssi=%d %s", from, driver.lastRssi(), (char *)buf);
+			Serial.printlnf("\nGot packet from 0x%02x rssi=%d %s", from, driver.lastRssi(), (char *)buf+4);
+			//Serial.printlnf("Batt: %3.2f", (float *)buf);
+    		batt = (float*)buf;
+			Serial.printlnf("Batt: %3.2f", *batt);
 			
-    		if (!GPS.parse((char*)buf)) { // this also sets the newNMEAreceived() flag to false
+    		if (!GPS.parse((char*)buf+4)) { // this also sets the newNMEAreceived() flag to false
 				Serial.println("\nFailed to parse GPS data\n");
 			}
 			else {
@@ -108,33 +111,25 @@ void loop() {
 					byte* lng = reinterpret_cast<byte*>(&GPS.longitudeDegrees);
 					int16_t Rssi = driver.lastRssi();
 					byte* rssi = reinterpret_cast<byte*>(&Rssi);
-					uint8_t latLong[10] = {0,0,0,0,0,0,0,0,0,0};
-					latLong[0] = lat[0];
-					latLong[1] = lat[1];
-					latLong[2] = lat[2];
-					latLong[3] = lat[3];
-					latLong[4] = lng[0];
-					latLong[5] = lng[1];
-					latLong[6] = lng[2];
-					latLong[7] = lng[3];
-					latLong[8] = rssi[1];
-					latLong[9] = rssi[0];
-					server.write(latLong, 10, 5000); 
-      				//Serial.printlnf("Bytes sent: %c", lat);
-					
-					//Particle.publish("gpsdata", (char *)buf);
-
-					/*
-					float latitude = 51.24855439074274f;
-					float longditude = -0.5447383774659881f;
-					std::memcpy(&latLong, &latitude, 4);
-					std::memcpy(&latLong+4, &longditude, 4);
-					Serial.printlnf("Latitude: %f, Longditude: %f", &latLong, &latLong+4);
-					int bytes = server.write(reinterpret_cast<byte*>(&latLong), 8, 10000);
-					int err = server.getWriteError();
+					uint8_t data[14]; // = {0,0,0,0,0,0,0,0,0,0};
+					data[0] = lat[0];
+					data[1] = lat[1];
+					data[2] = lat[2];
+					data[3] = lat[3];
+					data[4] = lng[0];
+					data[5] = lng[1];
+					data[6] = lng[2];
+					data[7] = lng[3];
+					data[8] = rssi[1];
+					data[9] = rssi[0];
+					data[10] = buf[0];
+					data[11] = buf[1];
+					data[12] = buf[2];
+					data[13] = buf[3];
+					int err = server.write(data, 14, 5000); 
 					//if (err != 0) {
-  					Serial.printlnf("TCPServer::write() failed (error = %d), number of bytes written: %d", err, bytes);
-					*/
+  					//Serial.printlnf("TCPServer::write() failed (error = %d), number of bytes written: %d", err, bytes);
+					//Particle.publish("gpsdata", (char *)buf);
 				}
 				else {
 					// if no client is yet connected, check for a new connection

@@ -6,6 +6,7 @@
 
 #define CLIENT_ADDRESS 1
 #define SERVER_ADDRESS 2
+#define VBATPIN A7
 
 // Feather M0 w/Radio
 #define RFM95_CS    8
@@ -28,6 +29,8 @@ RHReliableDatagram manager(driver, CLIENT_ADDRESS);
 Adafruit_GPS GPS(&GPSSerial);
 
 uint32_t timer = millis();
+
+float batt = 0;
 
 
 void setup() 
@@ -72,6 +75,7 @@ void setup()
 
 // Dont put this on the stack:
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+uint8_t res[RH_RF95_MAX_MESSAGE_LEN];
 uint32_t counter = 0;
 uint16_t gpsDataLen = 0;
 
@@ -80,27 +84,21 @@ void loop()
 	if (manager.available())
 	{
 		// Wait for a message addressed to us from the client
-		uint8_t len = sizeof(buf);
+		uint8_t len = sizeof(res);
 		uint8_t from;
-		if (manager.recvfromAck(buf, &len, &from))
+		if (manager.recvfromAck(res, &len, &from))
     //if (manager.recvfrom(buf, &len, &from))
     //if (manager.recvfromAckTimeout(buf, &len, &from))
 		{
-			buf[len] = 0;
-			Serial.printf("\nGot packet from 0x%02x rssi=%d %s", from, driver.lastRssi(), (char *)buf);
+			res[len] = 0;
+			Serial.printf("\nGot packet from 0x%02x rssi=%d %s", from, driver.lastRssi(), (char *)res);
 
-      if (buf[0] == 0) {
+      if (res[0] == 0) {
         Serial.print("Message is a command");
       }
-			//int request = 0;
-			//char *cp = strchr((char *)buf, '=');
-			//if (cp) {
-			//	request = atoi(cp + 1);
-			//}
 
-			//snprintf((char *)buf, sizeof(buf), "request=%d rssi=%d", request, driver.lastRssi());
 			// Send a reply back to the originator client
-			if (!manager.sendtoWait(buf, strlen((char *)buf), from))
+			if (!manager.sendtoWait(res, strlen((char *)res), from))
 				Serial.println("sendtoWait failed");
 		}
   }
@@ -126,7 +124,7 @@ void loop()
     }
   }
 
-  // approximately every 2 seconds or so, print out the current stats
+  // approximately every 10 seconds or so, print out the current stats
   if (millis() - timer > 10000) {
     timer = millis(); // reset the timer
     /*
@@ -166,21 +164,22 @@ void loop()
     Serial.println("\nSending to rf95_reliable_datagram_server");
 
     // Send a message to manager_server
-    snprintf((char *)buf, sizeof(buf), GPS.lastNMEA()); //"to server counter=%d", ++counter);
+    snprintf((char *)buf+4, sizeof(buf), GPS.lastNMEA()); //"to server counter=%d", ++counter);
+    memcpy(buf, reinterpret_cast<char*>(&batt), 4);
 
     if (manager.sendtoWait(buf, sizeof(buf), SERVER_ADDRESS))
     {
       // Now wait for a reply from the server
-      Serial.println((char *)buf);
-      uint8_t len = sizeof(buf);
+      Serial.println((char *)buf+4);
+      uint8_t len = sizeof(res);
       uint8_t from;   
-      if (manager.recvfromAckTimeout(buf, &len, 2000, &from))
+      if (manager.recvfromAckTimeout(res, &len, 2000, &from))
       {
-        buf[len] = 0;
+        res[len] = 0;
         Serial.print("Got reply from 0x");
         Serial.println(from, HEX);
         //Serial.print("Data: ");
-        Serial.println((char*)buf);
+        Serial.println((char*)res+4);
       }
       else
       {
@@ -189,7 +188,16 @@ void loop()
     }
     else
       Serial.println("sendtoWait failed");
-    //delay(3000);
+  
+    batt = analogRead(VBATPIN);
+    batt *= 2;
+    batt *= 3.3;
+    batt /= 1024;
+    Serial.print("VBat: " ); Serial.println(batt);
+    float* b = (float*)buf;
+		Serial.print("Batt: "); Serial.println(*b);
+    float* c = (float*)res;
+		Serial.print("Batt res: "); Serial.println(*c);
   }
 }
 
